@@ -7,6 +7,7 @@ from urllib.request import urlopen
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 
+
 gateway_requests = Counter(
     "gateway_requests",
     "Total number of requests handled by the API gateway.",
@@ -51,6 +52,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+    
         self.end_headers()
         self.wfile.write(body)
 

@@ -10,6 +10,7 @@ services:
       - "8001:8001"
     volumes:
       - ./data:/app/data:ro
+      - ./frontend:/app/static:ro
     networks:
       - ticketmei-net
 
@@ -67,3 +68,4 @@ services:
       - ticketmei-net
     profiles:
       - testing
+
