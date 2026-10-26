@@ -1,0 +1,19 @@
+<body>
+  <h1>TicketMei - Eventos</h1>
+  <a href="/">Início</a>
+  <ul id="lista"></ul>
+
+  <script>
+    fetch("/events")
+      .then(r => r.json())
+      .then(eventos => {
+        const lista = document.getElementById("lista");
+        eventos.forEach(e => {
+          const li = document.createElement("li");
+          li.textContent = `${e.title} – ${e.venue} – ${e.price_eur} €`;
+          lista.appendChild(li);
+        });
+      });
+  </script>
+</body>
+</html>
