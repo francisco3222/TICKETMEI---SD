@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from time import perf_counter
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 from urllib.request import urlopen
 
 import pika
@@ -182,13 +182,28 @@ def create_order(payload):
 # ---------------------------------------------------------------- HTTP
 class OrderHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        path = urlsplit(self.path).path
+        url = urlsplit(self.path)
+        path = url.path
         if path == "/metrics":
             self._send(200, generate_latest(), CONTENT_TYPE_LATEST)
             return
 
         started = perf_counter()
-        if path.startswith("/orders/"):
+        if path == "/orders":
+            # Lista as compras; ?customer_id=c1 filtra por cliente, ?status=PENDING por estado
+            endpoint = "/orders"
+            query = parse_qs(url.query)
+            customer_id = query.get("customer_id", [None])[0]
+            wanted_status = query.get("status", [None])[0]
+            with ORDERS_LOCK:
+                result = [
+                    dict(o) for o in ORDERS.values()
+                    if (customer_id is None or o["customer_id"] == customer_id)
+                    and (wanted_status is None or o["status"] == wanted_status.upper())
+                ]
+            result.sort(key=lambda o: o["created_at"], reverse=True)
+            status = 200
+        elif path.startswith("/orders/"):
             endpoint = "/orders/{id}"
             with ORDERS_LOCK:
                 order = ORDERS.get(path.removeprefix("/orders/"))

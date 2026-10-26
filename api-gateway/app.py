@@ -28,6 +28,7 @@ gateway_request_duration = Histogram(
 ROUTES = [
     ("GET", re.compile(r"^/events$"), "/events", CATALOG_URL),
     ("GET", re.compile(r"^/events/[^/]+$"), "/events/{id}", CATALOG_URL),
+    ("GET", re.compile(r"^/orders$"), "/orders", ORDER_URL),
     ("POST", re.compile(r"^/orders?$"), "/orders", ORDER_URL),
     ("GET", re.compile(r"^/orders/[^/]+$"), "/orders/{id}", ORDER_URL),
 ]
@@ -52,7 +53,8 @@ class GatewayHandler(BaseHTTPRequestHandler):
         self._handle("POST")
 
     def _handle(self, method):
-        path = urlsplit(self.path).path
+        url = urlsplit(self.path)
+        path = url.path
         if method == "GET" and path == "/metrics":
             self._send(200, generate_latest(), CONTENT_TYPE_LATEST)
             return
@@ -63,6 +65,8 @@ class GatewayHandler(BaseHTTPRequestHandler):
         if upstream is None:
             status, body = 404, b'{"error":"Not found"}'
         else:
+            if url.query:
+                upstream += "?" + url.query  # reencaminha filtros, ex.: ?customer_id=c1
             status, body = self._forward(method, upstream)
 
         self._send(status, body, "application/json; charset=utf-8")
