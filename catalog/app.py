@@ -10,6 +10,8 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_
 with Path("/app/data/events.json").open(encoding="utf-8") as events_file:
     EVENTS = json.load(events_file)
 
+
+
 STATIC_INDEX = Path("/app/static/index.html")
 
 catalog_requests = Counter(
@@ -43,7 +45,7 @@ class CatalogHandler(BaseHTTPRequestHandler):
                 status = 404
                 body = json.dumps({"error": "Dashboard not found"}).encode("utf-8")
         else:
-            if path == "/events":
+            if path == "/events" :
                 endpoint = "/events"
                 status = 200
                 result = EVENTS
