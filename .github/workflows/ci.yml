@@ -1,0 +1,63 @@
+name: CI (fases 1 e 2)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verificar sintaxe Python
+        run: python -m py_compile api-gateway/app.py catalog/app.py order/app.py notification/app.py
+
+      - name: Validar docker-compose.yml
+        run: docker compose config --quiet
+
+      - name: Build das imagens
+        run: docker compose build
+
+      - name: Arrancar a stack
+        run: docker compose up -d
+
+      - name: Esperar pelo API Gateway e pelo Order
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fs http://localhost:8000/events >/dev/null && curl -fs http://localhost:8002/health >/dev/null; then
+              echo "Serviços prontos"; exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs
+          exit 1
+
+      - name: Verificar endpoints /metrics
+        run: |
+          curl -fs http://localhost:8000/metrics | grep -q gateway_requests_total
+          curl -fs http://localhost:8001/metrics | grep -q catalog_requests_total
+          curl -fs http://localhost:8002/metrics | grep -q orders_initiated_total
+          curl -fs http://localhost:8003/metrics | grep -q notifications_processed_total
+
+      - name: Testes k6 (smoke)
+        run: docker compose --profile testing run --rm k6 run smoke-test.js
+
+      - name: Verificar que o Notification consumiu as mensagens
+        run: |
+          sleep 3
+          SENT=$(curl -fs http://localhost:8003/metrics | awk '/^notifications_processed_total\{status="SENT"\}/ {print $2}')
+          echo "Notificações SENT: $SENT"
+          python3 -c "import sys; sys.exit(0 if float('${SENT:-0}') > 0 else 1)"
+
+      - name: Logs em caso de falha
+        if: failure()
+        run: docker compose logs --tail=200
+
+      - name: Parar a stack
+        if: always()
+        run: docker compose down -v

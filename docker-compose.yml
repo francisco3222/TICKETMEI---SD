@@ -2,6 +2,10 @@ networks:
   ticketmei-net:
     driver: bridge
 
+volumes:
+  grafana-data:
+  notification-logs:
+
 services:
   catalog:
     build: ./catalog
@@ -19,8 +23,65 @@ services:
     container_name: api-gateway
     ports:
       - "8000:8000"
+    environment:
+      CATALOG_URL: http://catalog:8001
+      ORDER_URL: http://order:8002
     depends_on:
       - catalog
+      - order
+    networks:
+      - ticketmei-net
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq
+    hostname: rabbitmq
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # UI de gestão (guest/guest)
+      - "15692:15692"   # métricas Prometheus
+    volumes:
+      - ./rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+    networks:
+      - ticketmei-net
+
+  order:
+    build: ./order
+    container_name: order
+    ports:
+      - "8002:8002"
+    environment:
+      CATALOG_URL: http://catalog:8001
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/%2F
+      ORDER_QUEUE: order_created
+      MAX_TICKETS_PER_ORDER: "4"
+    depends_on:
+      catalog:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - ticketmei-net
+
+  notification:
+    build: ./notification
+    container_name: notification
+    ports:
+      - "8003:8003"
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/%2F
+      ORDER_QUEUE: order_created
+      EMAIL_DELAY_SECONDS: "0.1"
+    volumes:
+      - notification-logs:/app/logs
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
     networks:
       - ticketmei-net
 
@@ -28,7 +89,7 @@ services:
     image: prom/prometheus:v2.50.0
     container_name: prometheus
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
     networks:
@@ -39,6 +100,12 @@ services:
     container_name: grafana
     ports:
       - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
     networks:
       - ticketmei-net
 
@@ -54,6 +121,7 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro
     networks:
       - ticketmei-net
+
   k6:
     image: grafana/k6:0.49.0
     container_name: k6
@@ -61,6 +129,8 @@ services:
     working_dir: /ci-scripts
     volumes:
       - ./k6:/ci-scripts
+    # Por defeito corre o teste de leitura; para as compras:
+    #   docker compose run --rm k6 run order-test.js
     command: run load-test.js
     depends_on:
       - api-gateway
@@ -68,4 +138,3 @@ services:
       - ticketmei-net
     profiles:
       - testing
-

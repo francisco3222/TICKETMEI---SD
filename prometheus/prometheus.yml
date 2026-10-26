@@ -10,6 +10,25 @@ scrape_configs:
     static_configs:
       - targets: ['catalog:8001']
 
+  - job_name: 'order'
+    static_configs:
+      - targets: ['order:8002']
+
+  - job_name: 'notification'
+    static_configs:
+      - targets: ['notification:8003']
+
+  # Métricas agregadas (usadas pelo dashboard oficial "RabbitMQ-Overview", ID 10991)
+  - job_name: 'rabbitmq'
+    static_configs:
+      - targets: ['rabbitmq:15692']
+
+  # Métricas por fila (label "queue") -> profundidade da fila order_created
+  - job_name: 'rabbitmq-per-object'
+    metrics_path: /metrics/per-object
+    static_configs:
+      - targets: ['rabbitmq:15692']
+
   - job_name: 'cadvisor'
     static_configs:
       - targets: ['cadvisor:8080']
