@@ -42,10 +42,10 @@ configMapGenerator:
 
 images:
 - name: ghcr.io/francisco3222/ticketmei-api-gateway
-  newTag: 5aae65966d244b754391f93a9dbf1294852f91d3
+  newTag: 72d5bf51ae6eb8647ff048dbf039cbdb3134dfb9
 - name: ghcr.io/francisco3222/ticketmei-catalog
-  newTag: 5aae65966d244b754391f93a9dbf1294852f91d3
+  newTag: 72d5bf51ae6eb8647ff048dbf039cbdb3134dfb9
 - name: ghcr.io/francisco3222/ticketmei-notification
-  newTag: 5aae65966d244b754391f93a9dbf1294852f91d3
+  newTag: 72d5bf51ae6eb8647ff048dbf039cbdb3134dfb9
 - name: ghcr.io/francisco3222/ticketmei-order
-  newTag: 5aae65966d244b754391f93a9dbf1294852f91d3
+  newTag: 72d5bf51ae6eb8647ff048dbf039cbdb3134dfb9
