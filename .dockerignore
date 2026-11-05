@@ -1,0 +1,9 @@
+.git
+.github
+k8s
+argocd
+grafana
+prometheus
+k6
+**/__pycache__
+*.md

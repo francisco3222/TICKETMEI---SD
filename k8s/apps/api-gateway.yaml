@@ -1,0 +1,57 @@
+# API Gateway: ponto de entrada único (http://localhost:8000).
+# 2 réplicas: o rate limiter continua correto porque o contador está no Redis, não em memória.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  labels: {app: api-gateway}
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  selector:
+    matchLabels: {app: api-gateway}
+  template:
+    metadata:
+      labels: {app: api-gateway}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: /metrics
+    spec:
+      containers:
+        - name: api-gateway
+          image: ghcr.io/francisco3222/ticketmei-api-gateway   # tag gerida pelo kustomization.yaml
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {containerPort: 8000, name: http}
+          env:
+            - {name: CATALOG_URL, value: "http://catalog:8001"}
+            - {name: ORDER_URL, value: "http://order:8002"}
+            - {name: REDIS_URL, value: "redis://redis:6379/0"}
+            - {name: RATE_LIMIT_ENABLED, value: "true"}
+            - {name: RATE_LIMIT_REQUESTS, value: "5"}
+            - {name: RATE_LIMIT_WINDOW_SECONDS, value: "1"}
+            - {name: TRUST_PROXY_HEADERS, value: "false"}
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  labels: {app: api-gateway}
+spec:
+  type: LoadBalancer        # no Docker Desktop fica em http://localhost:8000
+  selector: {app: api-gateway}
+  ports:
+    - {name: http, port: 8000, targetPort: http}

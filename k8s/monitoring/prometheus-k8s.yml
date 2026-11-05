@@ -1,0 +1,65 @@
+# Configuração do Prometheus para o Kubernetes.
+# (O docker-compose continua a usar prometheus/prometheus.yml com alvos estáticos.)
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  # Descobre automaticamente todos os pods do namespace com a anotação prometheus.io/scrape: "true".
+  # Com várias réplicas (ex.: 2x api-gateway) cada pod é recolhido separadamente.
+  - job_name: ticketmei-pods
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [ticketmei]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: "true"
+      - source_labels: [__meta_kubernetes_pod_phase]
+        action: keep
+        regex: Running
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: (.+);(.+)
+        replacement: $1:$2
+        target_label: __address__
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        target_label: job
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+
+  # RabbitMQ: métricas agregadas (dashboard oficial 10991)
+  - job_name: rabbitmq
+    static_configs:
+      - targets: ['rabbitmq:15692']
+
+  # RabbitMQ: métricas por fila (profundidade de order_created)
+  - job_name: rabbitmq-per-object
+    metrics_path: /metrics/per-object
+    static_configs:
+      - targets: ['rabbitmq:15692']
+
+  # CPU/memória dos contentores (cAdvisor do kubelet, via API server)
+  - job_name: kubernetes-cadvisor
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    authorization:
+      credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    kubernetes_sd_configs:
+      - role: node
+    relabel_configs:
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+    metric_relabel_configs:
+      - source_labels: [__name__, namespace]
+        regex: (container_cpu_usage_seconds_total|container_memory_working_set_bytes);ticketmei
+        action: keep
