@@ -26,6 +26,7 @@ concurrency:
 permissions:
   contents: read
 
+
 jobs:
   test:
     uses: ./.github/workflows/ci.yml
@@ -87,6 +88,8 @@ jobs:
       - name: Nome da imagem (GHCR exige minúsculas)
         run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ticketmei-${{ matrix.service }}" >> "$GITHUB_ENV"
 
+      - uses: docker/setup-qemu-action@v3          # NOVO: permite construir para arm64 (Mac Apple)
+
       - uses: docker/setup-buildx-action@v3
 
       - name: Login no GHCR
@@ -102,6 +105,8 @@ jobs:
           context: .
           file: ${{ matrix.service }}/Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64       # NOVO: imagem para Intel e Apple
+          provenance: false                        # NOVO: imagem simples, sem attestation
           tags: |
             ${{ env.IMAGE }}:${{ github.sha }}
             ${{ env.IMAGE }}:latest
