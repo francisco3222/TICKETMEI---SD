@@ -1,0 +1,52 @@
+# Ponto de entrada que o ArgoCD lê (path: k8s).
+# As tags das imagens são atualizadas automaticamente pelo GitHub Actions
+# (.github/workflows/cd.yml) com o Git SHA do commit que as construiu.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ticketmei
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: ticketmei
+    includeSelectors: false
+
+resources:
+  - namespace.yaml
+  - infra/redis.yaml
+  - infra/rabbitmq.yaml
+  - apps/catalog.yaml
+  - apps/order.yaml
+  - apps/notification.yaml
+  - apps/api-gateway.yaml
+  - monitoring/prometheus.yaml
+  - monitoring/grafana.yaml
+
+configMapGenerator:
+  - name: rabbitmq-plugins
+    literals:
+      - enabled_plugins=[rabbitmq_management,rabbitmq_prometheus].
+  - name: prometheus-config
+    files:
+      - prometheus.yml=monitoring/prometheus-k8s.yml
+  - name: grafana-datasources
+    files:
+      - monitoring/grafana/provisioning/datasources/prometheus.yml
+  - name: grafana-dashboard-provider
+    files:
+      - monitoring/grafana/provisioning/dashboards/dashboards.yml
+  - name: grafana-dashboards
+    files:
+      - monitoring/grafana/dashboards/gateway.json
+      - monitoring/grafana/dashboards/catalog.json
+      - monitoring/grafana/dashboards/order-notification.json
+
+images:
+  - name: ghcr.io/francisco3222/ticketmei-api-gateway
+    newTag: latest
+  - name: ghcr.io/francisco3222/ticketmei-catalog
+    newTag: latest
+  - name: ghcr.io/francisco3222/ticketmei-order
+    newTag: latest
+  - name: ghcr.io/francisco3222/ticketmei-notification
+    newTag: latest

@@ -1,0 +1,54 @@
+# Notification: consumidor da fila order_created. Pode escalar (competing consumers):
+#   o RabbitMQ distribui as mensagens entre as réplicas.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification
+  labels: {app: notification}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: notification}
+  template:
+    metadata:
+      labels: {app: notification}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8003"
+        prometheus.io/path: /metrics
+    spec:
+      containers:
+        - name: notification
+          image: ghcr.io/francisco3222/ticketmei-notification
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {containerPort: 8003, name: metrics}
+          env:
+            - {name: RABBITMQ_URL, value: "amqp://guest:guest@rabbitmq:5672/%2F"}
+            - {name: ORDER_QUEUE, value: "order_created"}
+            - {name: EMAIL_DELAY_SECONDS, value: "0.1"}
+          volumeMounts:
+            - {name: logs, mountPath: /app/logs}
+          readinessProbe:
+            httpGet: {path: /metrics, port: metrics}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /metrics, port: metrics}
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+      volumes:
+        - name: logs
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification
+  labels: {app: notification}
+spec:
+  selector: {app: notification}
+  ports:
+    - {name: metrics, port: 8003, targetPort: metrics}

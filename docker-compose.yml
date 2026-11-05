@@ -8,7 +8,9 @@ volumes:
 
 services:
   catalog:
-    build: ./catalog
+    build:
+      context: .
+      dockerfile: catalog/Dockerfile
     container_name: catalog
     ports:
       - "8001:8001"
@@ -19,16 +21,32 @@ services:
       - ticketmei-net
 
   api-gateway:
-    build: ./api-gateway
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
     container_name: api-gateway
     ports:
       - "8000:8000"
     environment:
       CATALOG_URL: http://catalog:8001
       ORDER_URL: http://order:8002
+      REDIS_URL: redis://redis:6379/0
+      RATE_LIMIT_ENABLED: "true"
+      RATE_LIMIT_REQUESTS: "5"          # RNF3: 5 pedidos/s por IP em POST /orders
+      RATE_LIMIT_WINDOW_SECONDS: "1"
     depends_on:
       - catalog
       - order
+      - redis
+    networks:
+      - ticketmei-net
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
     networks:
       - ticketmei-net
 
@@ -51,7 +69,9 @@ services:
       - ticketmei-net
 
   order:
-    build: ./order
+    build:
+      context: .
+      dockerfile: order/Dockerfile
     container_name: order
     ports:
       - "8002:8002"
@@ -69,7 +89,9 @@ services:
       - ticketmei-net
 
   notification:
-    build: ./notification
+    build:
+      context: .
+      dockerfile: notification/Dockerfile
     container_name: notification
     ports:
       - "8003:8003"
@@ -102,8 +124,9 @@ services:
       - "3000:3000"
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      # mesma fonte que o Kubernetes usa (k8s/monitoring/grafana)
+      - ./k8s/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./k8s/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - prometheus
     networks:
@@ -130,7 +153,8 @@ services:
     volumes:
       - ./k6:/ci-scripts
     # Por defeito corre o teste de leitura; para as compras:
-    #   docker compose run --rm k6 run order-test.js
+    #   docker compose --profile testing run --rm k6 run order-test.js
+    #   docker compose --profile testing run --rm k6 run rate-limit-test.js
     command: run load-test.js
     depends_on:
       - api-gateway

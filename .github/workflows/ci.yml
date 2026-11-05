@@ -1,20 +1,39 @@
-name: CI (fases 1 e 2)
+name: CI
 
+# Fases 1 e 2: compila, valida o docker-compose e corre os testes k6.
+# Fase 3: também valida os manifestos Kubernetes de /k8s.
+# Corre em pull requests e é chamado pelo cd.yml antes de qualquer build/deploy.
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
+  validate-k8s:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar kustomize e kubeconform
+        run: |
+          mkdir -p "$HOME/bin" && echo "$HOME/bin" >> "$GITHUB_PATH"
+          curl -sSfL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.4.3/kustomize_v5.4.3_linux_amd64.tar.gz | tar xz -C "$HOME/bin"
+          curl -sSfL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz -C "$HOME/bin" kubeconform
+
+      - name: kustomize build + validação dos schemas
+        run: kustomize build k8s | kubeconform -strict -summary -kubernetes-version 1.30.0
+
   build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
       - name: Verificar sintaxe Python
-        run: python -m py_compile api-gateway/app.py catalog/app.py order/app.py notification/app.py
+        run: python -m py_compile api-gateway/*.py catalog/app.py order/app.py notification/app.py
 
       - name: Validar docker-compose.yml
         run: docker compose config --quiet
@@ -28,7 +47,7 @@ jobs:
       - name: Esperar pelo API Gateway e pelo Order
         run: |
           for i in $(seq 1 60); do
-            if curl -fs http://localhost:8000/events >/dev/null && curl -fs http://localhost:8002/health >/dev/null; then
+            if curl -fs http://localhost:8000/health >/dev/null && curl -fs http://localhost:8000/events >/dev/null && curl -fs http://localhost:8002/health >/dev/null; then
               echo "Serviços prontos"; exit 0
             fi
             sleep 2
@@ -40,6 +59,7 @@ jobs:
       - name: Verificar endpoints /metrics
         run: |
           curl -fs http://localhost:8000/metrics | grep -q gateway_requests_total
+          curl -fs http://localhost:8000/metrics | grep -q gateway_rate_limited_total
           curl -fs http://localhost:8001/metrics | grep -q catalog_requests_total
           curl -fs http://localhost:8002/metrics | grep -q orders_initiated_total
           curl -fs http://localhost:8003/metrics | grep -q notifications_processed_total
@@ -53,6 +73,9 @@ jobs:
           SENT=$(curl -fs http://localhost:8003/metrics | awk '/^notifications_processed_total\{status="SENT"\}/ {print $2}')
           echo "Notificações SENT: $SENT"
           python3 -c "import sys; sys.exit(0 if float('${SENT:-0}') > 0 else 1)"
+
+      - name: Testes k6 (rate limiter -> 429)
+        run: docker compose --profile testing run --rm k6 run rate-limit-test.js
 
       - name: Logs em caso de falha
         if: failure()

@@ -1,0 +1,27 @@
+# Aplicar UMA vez, depois de instalar o ArgoCD:
+#   kubectl apply -n argocd -f argocd/application.yaml
+# A partir daí o ArgoCD vigia a pasta k8s/ do repositório e sincroniza sozinho
+# (sem kubectl apply manual) sempre que o GitHub Actions atualiza as tags das imagens.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ticketmei
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/francisco3222/TICKETMEI---SD.git
+    targetRevision: main
+    path: k8s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ticketmei
+  syncPolicy:
+    automated:
+      prune: true       # apaga do cluster o que for removido do Git
+      selfHeal: true    # desfaz alterações manuais feitas com kubectl
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 3m}

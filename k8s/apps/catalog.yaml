@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog
+  labels: {app: catalog}
+spec:
+  replicas: 2               # sem estado (events.json está dentro da imagem)
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  selector:
+    matchLabels: {app: catalog}
+  template:
+    metadata:
+      labels: {app: catalog}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8001"
+        prometheus.io/path: /metrics
+    spec:
+      containers:
+        - name: catalog
+          image: ghcr.io/francisco3222/ticketmei-catalog
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {containerPort: 8001, name: http}
+          readinessProbe:
+            httpGet: {path: /events, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /metrics, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog
+  labels: {app: catalog}
+spec:
+  selector: {app: catalog}
+  ports:
+    - {name: http, port: 8001, targetPort: http}

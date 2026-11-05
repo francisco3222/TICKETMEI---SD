@@ -1,0 +1,51 @@
+# Order: 1 réplica DE PROPÓSITO. As compras estão em memória no processo;
+# com 2 réplicas, GET /orders/{id} podia ir parar à réplica que não tem a compra.
+# (Para escalar seria preciso uma base de dados própria do Order.)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order
+  labels: {app: order}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: order}
+  template:
+    metadata:
+      labels: {app: order}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8002"
+        prometheus.io/path: /metrics
+    spec:
+      containers:
+        - name: order
+          image: ghcr.io/francisco3222/ticketmei-order
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {containerPort: 8002, name: http}
+          env:
+            - {name: CATALOG_URL, value: "http://catalog:8001"}
+            - {name: RABBITMQ_URL, value: "amqp://guest:guest@rabbitmq:5672/%2F"}
+            - {name: ORDER_QUEUE, value: "order_created"}
+            - {name: MAX_TICKETS_PER_ORDER, value: "4"}
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order
+  labels: {app: order}
+spec:
+  selector: {app: order}
+  ports:
+    - {name: http, port: 8002, targetPort: http}

@@ -1,0 +1,152 @@
+name: CD
+
+# Fase 3 (RNF4/RNF5): em cada push para main
+#   1. corre o CI (testes docker-compose + k6 + validação de /k8s)
+#   2. identifica que serviços mudaram
+#   3. constrói só esses serviços e publica no GHCR com a tag = Git SHA
+#   4. atualiza as tags em k8s/kustomization.yaml e faz commit
+#   5. o ArgoCD vê o commit e faz o rolling update no cluster (sem kubectl apply)
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'argocd/**'
+  workflow_dispatch:
+    inputs:
+      build_all:
+        description: 'Construir todos os serviços (usar na 1.ª vez)'
+        type: boolean
+        default: true
+
+concurrency:
+  group: cd-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.result.outputs.services }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detetar alterações por serviço
+        id: filter
+        if: github.event_name == 'push'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            api-gateway:
+              - 'api-gateway/**'
+            catalog:
+              - 'catalog/**'
+              - 'data/**'
+              - 'frontend/**'
+            order:
+              - 'order/**'
+            notification:
+              - 'notification/**'
+
+      - name: Lista final de serviços
+        id: result
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ inputs.build_all }}" = "true" ]; then
+              SERVICES='["api-gateway","catalog","order","notification"]'
+            else
+              SERVICES='[]'
+            fi
+          else
+            SERVICES='${{ steps.filter.outputs.changes }}'
+            [ -z "$SERVICES" ] && SERVICES='[]'
+          fi
+          echo "Serviços a construir: $SERVICES"
+          echo "services=$SERVICES" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: [test, changes]
+    if: needs.changes.outputs.services != '[]' && needs.changes.outputs.services != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        service: ${{ fromJSON(needs.changes.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Nome da imagem (GHCR exige minúsculas)
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ticketmei-${{ matrix.service }}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push ${{ matrix.service }}:${{ github.sha }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.service }}/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  update-manifests:
+    needs: [changes, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Instalar kustomize
+        run: |
+          mkdir -p "$HOME/bin" && echo "$HOME/bin" >> "$GITHUB_PATH"
+          curl -sSfL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.4.3/kustomize_v5.4.3_linux_amd64.tar.gz | tar xz -C "$HOME/bin"
+
+      - name: Atualizar tags em k8s/kustomization.yaml
+        env:
+          SERVICES: ${{ needs.changes.outputs.services }}
+        run: |
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          cd k8s
+          for svc in $(echo "$SERVICES" | jq -r '.[]'); do
+            echo "-> $svc = ${GITHUB_SHA}"
+            kustomize edit set image "ghcr.io/${OWNER}/ticketmei-${svc}:${GITHUB_SHA}"
+          done
+          cat kustomization.yaml
+
+      - name: Commit e push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add k8s/kustomization.yaml
+          if git diff --cached --quiet; then echo "Sem alterações"; exit 0; fi
+          git commit -m "chore(k8s): deploy ${GITHUB_SHA::7} [skip ci]"
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep 5
+          done
+          exit 1
