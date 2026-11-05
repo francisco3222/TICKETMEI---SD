@@ -58,11 +58,20 @@ jobs:
 
       - name: Verificar endpoints /metrics
         run: |
-          curl -fs http://localhost:8000/metrics | grep -q gateway_requests_total
-          curl -fs http://localhost:8000/metrics | grep -q gateway_rate_limited_total
-          curl -fs http://localhost:8001/metrics | grep -q catalog_requests_total
-          curl -fs http://localhost:8002/metrics | grep -q orders_initiated_total
-          curl -fs http://localhost:8003/metrics | grep -q notifications_processed_total
+          check() {  # $1 = URL, $2 = métrica que tem de existir
+            for i in $(seq 1 30); do
+              if curl -fs "$1" -o /tmp/metrics.txt && grep -q "$2" /tmp/metrics.txt; then
+                echo "OK  $1  ->  $2"; return 0
+              fi
+              sleep 2
+            done
+            echo "FALHOU: $1 não expõe $2"; curl -s "$1" | head -20; return 1
+          }
+          check http://localhost:8000/metrics gateway_requests_total
+          check http://localhost:8000/metrics gateway_rate_limited_total
+          check http://localhost:8001/metrics catalog_requests_total
+          check http://localhost:8002/metrics orders_initiated_total
+          check http://localhost:8003/metrics notifications_processed_total
 
       - name: Testes k6 (smoke)
         run: docker compose --profile testing run --rm k6 run smoke-test.js
