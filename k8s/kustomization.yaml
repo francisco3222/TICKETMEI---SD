@@ -7,46 +7,45 @@ kind: Kustomization
 namespace: ticketmei
 
 labels:
-  - pairs:
-      app.kubernetes.io/part-of: ticketmei
-    includeSelectors: false
+- pairs:
+    app.kubernetes.io/part-of: ticketmei
 
 resources:
-  - namespace.yaml
-  - infra/redis.yaml
-  - infra/rabbitmq.yaml
-  - apps/catalog.yaml
-  - apps/order.yaml
-  - apps/notification.yaml
-  - apps/api-gateway.yaml
-  - monitoring/prometheus.yaml
-  - monitoring/grafana.yaml
+- namespace.yaml
+- infra/redis.yaml
+- infra/rabbitmq.yaml
+- apps/catalog.yaml
+- apps/order.yaml
+- apps/notification.yaml
+- apps/api-gateway.yaml
+- monitoring/prometheus.yaml
+- monitoring/grafana.yaml
 
 configMapGenerator:
-  - name: rabbitmq-plugins
-    literals:
-      - enabled_plugins=[rabbitmq_management,rabbitmq_prometheus].
-  - name: prometheus-config
-    files:
-      - prometheus.yml=monitoring/prometheus-k8s.yml
-  - name: grafana-datasources
-    files:
-      - monitoring/grafana/provisioning/datasources/prometheus.yml
-  - name: grafana-dashboard-provider
-    files:
-      - monitoring/grafana/provisioning/dashboards/dashboards.yml
-  - name: grafana-dashboards
-    files:
-      - monitoring/grafana/dashboards/gateway.json
-      - monitoring/grafana/dashboards/catalog.json
-      - monitoring/grafana/dashboards/order-notification.json
+- literals:
+  - enabled_plugins=[rabbitmq_management,rabbitmq_prometheus].
+  name: rabbitmq-plugins
+- files:
+  - prometheus.yml=monitoring/prometheus-k8s.yml
+  name: prometheus-config
+- files:
+  - monitoring/grafana/provisioning/datasources/prometheus.yml
+  name: grafana-datasources
+- files:
+  - monitoring/grafana/provisioning/dashboards/dashboards.yml
+  name: grafana-dashboard-provider
+- files:
+  - monitoring/grafana/dashboards/gateway.json
+  - monitoring/grafana/dashboards/catalog.json
+  - monitoring/grafana/dashboards/order-notification.json
+  name: grafana-dashboards
 
 images:
-  - name: ghcr.io/francisco3222/ticketmei-api-gateway
-    newTag: latest
-  - name: ghcr.io/francisco3222/ticketmei-catalog
-    newTag: latest
-  - name: ghcr.io/francisco3222/ticketmei-order
-    newTag: latest
-  - name: ghcr.io/francisco3222/ticketmei-notification
-    newTag: latest
+- name: ghcr.io/francisco3222/ticketmei-api-gateway
+  newTag: d5ec4acab88e371cf31a615ef965cb9547bc09cb
+- name: ghcr.io/francisco3222/ticketmei-catalog
+  newTag: d5ec4acab88e371cf31a615ef965cb9547bc09cb
+- name: ghcr.io/francisco3222/ticketmei-notification
+  newTag: d5ec4acab88e371cf31a615ef965cb9547bc09cb
+- name: ghcr.io/francisco3222/ticketmei-order
+  newTag: d5ec4acab88e371cf31a615ef965cb9547bc09cb
