@@ -13,12 +13,12 @@ resources:
 
 images:
 - name: ghcr.io/francisco3222/ticketmei-api-gateway
-  newTag: 72d5bf51ae6eb8647ff048dbf039cbdb3134dfb9
+  newTag: 66429486c664051ae29f023a0ea5673cb88b3c2a
 - name: ghcr.io/francisco3222/ticketmei-catalog
-  newTag: 72d5bf51ae6eb8647ff048dbf039cbdb3134dfb9
+  newTag: 66429486c664051ae29f023a0ea5673cb88b3c2a
 - name: ghcr.io/francisco3222/ticketmei-notification
-  newTag: 72d5bf51ae6eb8647ff048dbf039cbdb3134dfb9
+  newTag: 66429486c664051ae29f023a0ea5673cb88b3c2a
 - name: ghcr.io/francisco3222/ticketmei-order
-  newTag: 72d5bf51ae6eb8647ff048dbf039cbdb3134dfb9
+  newTag: 66429486c664051ae29f023a0ea5673cb88b3c2a
 - name: ghcr.io/francisco3222/ticketmei-payment
-  newTag: latest
+  newTag: 66429486c664051ae29f023a0ea5673cb88b3c2a
