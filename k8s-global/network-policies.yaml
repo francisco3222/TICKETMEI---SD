@@ -1,0 +1,54 @@
+# ATENÇÃO: logo que UMA NetworkPolicy seleciona um pod, todo o tráfego de entrada que ela não
+# permita passa a ser recusado. Por isso, além da política do template (Prometheus), são
+# precisas as outras duas; sem elas o gateway deixava de chegar ao order, o order ao payment, etc.
+#
+# 1) Tráfego entre os nossos próprios pods (gateway -> catalog/order, order -> payment, ... -> redis)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+---
+# 2) Template do professor: o Prometheus (namespace monitoring) pode recolher as métricas
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape
+spec:
+  podSelector:
+    matchExpressions:
+      - {key: app, operator: In, values: [api-gateway, catalog, order, payment, notification]}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - {protocol: TCP, port: 8000}
+        - {protocol: TCP, port: 8001}
+        - {protocol: TCP, port: 8002}
+        - {protocol: TCP, port: 8003}
+        - {protocol: TCP, port: 8004}
+---
+# 3) O controlador de Ingress (noutro namespace) pode chegar ao API Gateway – e só a ele:
+#    catalog, order, payment e notification continuam inacessíveis de fora.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-gateway
+spec:
+  podSelector:
+    matchLabels:
+      app: api-gateway
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - {protocol: TCP, port: 8000}

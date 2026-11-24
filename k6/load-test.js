@@ -14,7 +14,7 @@ export const options = {
 };
 
 export default function () {
-  const res = http.get('http://api-gateway:8000/events');
+  const res = http.get(`${__ENV.BASE_URL || 'http://api-gateway:8000'}/events`);
   check(res, {
     'status is 200': (r) => r.status === 200,
   });

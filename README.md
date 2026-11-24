@@ -13,14 +13,17 @@ cliente ──HTTP──► api-gateway:8000 ──GET──► catalog:8001  (e
                    │
                    └──POST/GET──► order:8002 ──GET /events/{id}──► catalog
                                      │
-                                     └─ OrderCreated ─► RabbitMQ (fila order_created) ─► notification:8003
+                                     ├─ POST /payments ──[circuit breaker + retry c/ jitter]──► payment:8004
+                                     │
+                                     └─ OrderCreated ─► RabbitMQ orders.exchange ─► fila order_created ─► notification:8003
 ```
 
 | Serviço      | Porta | Endpoints                                         |
 |--------------|-------|---------------------------------------------------|
 | api-gateway  | 8000  | `GET /events`, `GET /events/{id}`, `GET /orders`, `POST /orders`, `GET /orders/{id}`, `GET /health`, `GET /metrics` |
 | catalog      | 8001  | `GET /events`, `GET /events/{id}`, `GET /metrics` |
-| order        | 8002  | `POST /orders`, `GET /orders`, `GET /orders/{id}`, `GET /health`, `GET /metrics` |
+| order        | 8002  | `POST /orders`, `GET /orders`, `GET /orders/{id}`, `GET /circuit-breaker`, `GET /health`, `GET /metrics` |
+| payment      | 8004  | `POST /payments`, `GET /payments`, `GET /payments/{id}`, `POST/GET /payments/configure-faults`, `GET /health`, `GET /metrics` (interno: não passa pelo gateway) |
 | notification | 8003  | `GET /metrics` (consumidor RabbitMQ)              |
 | redis        | 6379  | contadores do rate limiter                        |
 | rabbitmq     | 5672 / 15672 / 15692 | AMQP / UI (guest/guest) / métricas  |
@@ -32,11 +35,15 @@ cliente ──HTTP──► api-gateway:8000 ──GET──► catalog:8001  (e
 ```
 api-gateway/ catalog/ order/ notification/   código + Dockerfile de cada serviço (build a partir da raiz)
 data/events.json                              dados do Catalog
-k8s/                                          manifestos Kubernetes (o ArgoCD vigia esta pasta)
-  kustomization.yaml                          ponto de entrada + tags das imagens (atualizadas pelo CD)
+k8s/                                          manifestos do cluster LOCAL (o ArgoCD local vigia esta pasta)
+  kustomization.yaml                          ponto de entrada do cluster local
+  apps/kustomization.yaml                     serviços + TAGS das imagens (base partilhada; atualizada pelo CD)
+k8s-global/                                   cluster GLOBAL da UMa (grupo04): reutiliza k8s/apps + Redis,
+                                              ServiceMonitors, NetworkPolicies, Ingress, credenciais via Secret
   apps/  infra/  monitoring/                  serviços, redis/rabbitmq, prometheus/grafana
   monitoring/grafana/                         dashboards e provisioning (usados também pelo docker-compose)
-argocd/application.yaml                       Application do ArgoCD (aplicar uma vez)
+argocd/application.yaml                       Application do ArgoCD local (aplicar uma vez)
+argocd/application-global.yaml                Application do cluster global (criar pela UI do ArgoCD, projeto grupo04)
 .github/workflows/ci.yml                      testes (compose + k6) e validação de /k8s
 .github/workflows/cd.yml                      build por serviço → GHCR (tag = Git SHA) → atualiza /k8s
 k6/                                           load-test, order-test, smoke-test, rate-limit-test
@@ -53,7 +60,7 @@ docker compose up -d --build
 # criar uma compra (máx. 4 bilhetes)  –  PowerShell:
 Invoke-RestMethod -Method Post -Uri http://localhost:8000/orders -ContentType 'application/json' `
   -Body '{"customer_id":"c1","event_id":"evt-101","quantity":2,"email":"c1@ticketmei.pt"}'
-# -> 202 Accepted, status PENDING
+# -> 201 Created, status CONFIRMED (Parte II: a compra só é confirmada depois do pagamento)
 
 # log das notificações enviadas
 docker compose exec notification cat /app/logs/notifications.log
@@ -163,6 +170,123 @@ Resultado esperado: ~5 pedidos/s com 202 e os restantes com **429 Too Many Reque
 - **Prometheus no k8s** descobre os pods pela anotação `prometheus.io/scrape` (cada réplica é recolhida à parte)
   e lê CPU/memória do cAdvisor do kubelet.
 
+---
+
+## Parte II – Fase 1: Payment + Circuit Breaker + Retry com jitter
+
+### Fluxo de `POST /orders`
+
+```
+validar ─► Catalog (preço) ─► compra PENDING ─► Payment (dentro do circuit breaker, com retry + jitter)
+   ├─ pagamento OK                     ─► CONFIRMED ─► OrderCreated → orders.exchange ─► 201 Created
+   ├─ Payment falhou (circuito fechado) ─► FAILED                                       ─► 502 {"error":"Payment failed",...}
+   └─ circuito OPEN (fail-fast)         ─► FAILED, fallback sem chamar o Payment        ─► 503 {"error":"Payment system unavailable, try again later"}
+```
+
+### Circuit breaker (`order/circuit_breaker.py`)
+
+| Parâmetro (variável de ambiente) | Valor | Significado |
+|---|---|---|
+| `CB_FAILURE_RATE_THRESHOLD` | 0.5 | abre com ≥ 50 % de falhas (5xx, timeout, ligação recusada)… |
+| `CB_SLOW_CALL_SECONDS` / `CB_SLOW_CALL_RATE_THRESHOLD` | 1.5 s / 0.8 | …ou com ≥ 80 % de chamadas mais lentas que 1,5 s (limite de **latência**) |
+| `CB_WINDOW_SIZE` / `CB_MIN_CALLS` | 20 / 10 | janela deslizante dos últimos 20 pedidos, só decide com ≥ 10 |
+| `CB_OPEN_SECONDS` | 10 | tempo em OPEN antes de passar a HALF-OPEN |
+| `CB_HALF_OPEN_MAX_CALLS` | 3 | pedidos de teste em HALF-OPEN (3 sucessos → CLOSED; 1 falha → OPEN) |
+| `PAYMENT_TIMEOUT_SECONDS` | 2 | timeout de cada chamada ao Payment |
+| `RETRY_MAX_ATTEMPTS` / `RETRY_BASE_DELAY_SECONDS` / `RETRY_MAX_DELAY_SECONDS` | 3 / 0.1 / 1 | retry com *full jitter*: espera `random(0, min(1, 0.1·2^n))` |
+
+- Cada tentativa (incluindo os retries) conta para o circuito; **se o circuito abrir entre tentativas, os retries param logo**.
+- Erros 4xx do Payment não contam para o circuito (o problema é do pedido, não do Payment).
+- **Idempotência**: o Order envia `Idempotency-Key: <order_id>` e o Payment nunca cobra duas vezes a mesma compra
+  (importante com retries: um timeout não quer dizer que a cobrança não aconteceu).
+- Testes unitários: `cd order && python -m unittest -v test_circuit_breaker` (correm no CI).
+
+Métricas: `circuit_breaker_state` (0/1/2), `circuit_breaker_fallbacks_total`, `payment_client_requests_total{status}`,
+`orders_initiated_total{status}`, `circuit_breaker_transitions_total{from_state,to_state}`, `payment_retries_total`;
+no Payment: `payment_requests_total{http_status}`, `payment_processing_duration_seconds`, `payment_fault_error_rate`,
+`payment_fault_latency_seconds`. Dashboard: **TicketMEI - Payment & Circuit Breaker**.
+
+### Injetar falhas no Payment
+
+```powershell
+# PowerShell (docker-compose: o Payment está em localhost:8004)
+Invoke-RestMethod -Method Post -Uri http://localhost:8004/payments/configure-faults -ContentType 'application/json' -Body '{"error_rate":0.8}'
+Invoke-RestMethod -Method Post -Uri http://localhost:8004/payments/configure-faults -ContentType 'application/json' -Body '{"latency_ms":10000}'
+Invoke-RestMethod -Method Post -Uri http://localhost:8004/payments/configure-faults -ContentType 'application/json' -Body '{"error_rate":0,"latency_ms":0}'   # restaurar
+Invoke-RestMethod http://localhost:8002/circuit-breaker      # estado do circuito
+```
+```bash
+# Mac/Linux
+curl -X POST localhost:8004/payments/configure-faults -H 'Content-Type: application/json' -d '{"error_rate":0.8}'
+```
+No Kubernetes o Payment e o Order **não** estão expostos (só o gateway): abrir túneis primeiro
+```bash
+kubectl port-forward -n ticketmei svc/payment 8004:8004
+kubectl port-forward -n ticketmei svc/order 8002:8002     # noutro terminal
+```
+
+### Teste k6 do circuit breaker (50 pedidos/s, degradação a meio)
+
+```bash
+# docker-compose (Windows/Mac/Linux)
+docker compose --profile testing run --rm k6 run circuit-breaker-test.js                    # 80 % HTTP 500
+docker compose --profile testing run --rm -e FAULT=latency k6 run circuit-breaker-test.js   # 10 s de atraso
+
+# Kubernetes (com os dois port-forward acima abertos)
+docker run --rm -v "${PWD}/k6:/scripts" -e BASE_URL=http://host.docker.internal:8002 -e PAYMENT_URL=http://host.docker.internal:8004 grafana/k6:0.49.0 run /scripts/circuit-breaker-test.js
+#   Linux: acrescentar --network host e usar http://localhost:8002 / :8004
+```
+1 min normal → 2 min degradado → 2 min recuperação. O teste vai **diretamente ao Order** (não ao gateway):
+todos os pedidos do k6 saem do mesmo IP e o rate limiter (5/s por IP) rejeitaria 90 % com 429.
+Resultado medido localmente (versão encurtada): degradação com 80 % de erros → **OPEN no mesmo segundo**;
+com 10 s de latência → **OPEN em ~2,2 s** (um timeout); respostas 503 com p95 de 2–25 ms (fail-fast);
+depois de restaurar → HALF-OPEN → CLOSED em ≤ 10 s.
+
+Verificação rápida (≈30 s, também corre no CI): `bash scripts/circuit-breaker-check.sh` (bash / Git Bash).
+
+### Limitações conhecidas
+
+- Payment com **1 réplica**: a configuração de falhas é por processo.
+- Os dados (compras, pagamentos) continuam em memória: um reinício apaga-os.
+- Se o pagamento for aceite mas o RabbitMQ falhar, a compra fica CONFIRMED sem email
+  (a solução robusta seria o padrão *Outbox*).
+
+---
+
+## Cluster global (UMa) – grupo04
+
+Acesso só dentro da rede da UMa ou por VPN. **As credenciais (ArgoCD, RabbitMQ) nunca vão para o Git**:
+o `.gitignore` bloqueia `*ClusterCredentials*` e `*.docx`, e no cluster as do RabbitMQ vêm do Secret
+`grupo04-user-user-credentials`, que já existe no namespace.
+
+| | Cluster local (`k8s/`) | Cluster global (`k8s-global/`) |
+|---|---|---|
+| Namespace | `ticketmei` (criado pelo ArgoCD) | `grupo04` (já existe) |
+| Serviços da app e tags | `k8s/apps` | **os mesmos** (`../k8s/apps`) |
+| RabbitMQ | o nosso | o do cluster, vhost `/grupo04`, credenciais do Secret |
+| Prometheus / Grafana | os nossos | os do cluster: `ServiceMonitor` por serviço + `NetworkPolicy` |
+| Entrada externa | LoadBalancer `localhost:8000` | Ingress `http://grupo04-ticketmei.10.2.15.161.nip.io` |
+| Segurança | — | Pod Security *restricted*: tudo não-root (UID 10001; Redis 999) |
+
+**Criar a aplicação no ArgoCD global** (uma vez): http://argocd.10.2.15.161.nip.io → login `grupo04` →
+*+ NEW APP* → Name `ticketmei`, Project `grupo04`, Sync *Automatic* (+ *Prune* e *Self Heal*),
+Repository `https://github.com/francisco3222/TICKETMEI---SD.git`, Revision `main`, Path **`k8s-global`**,
+Cluster `https://kubernetes.default.svc`, Namespace `grupo04` → *CREATE*.
+(Equivalente em YAML: `argocd/application-global.yaml`.)
+
+**Verificar**: `http://grupo04-ticketmei.10.2.15.161.nip.io/events` no browser (rede UMa/VPN).
+
+**Dashboards**: no Grafana do cluster (http://grafana.10.2.15.161.nip.io) → pasta do grupo → *Import* →
+carregar os JSON de `k8s/monitoring/grafana/dashboards/` e escolher a datasource Prometheus no seletor
+(os dashboards usam a variável `${datasource}`).
+
+**NetworkPolicies**: a do template (Prometheus) sozinha *bloquearia* o tráfego entre os nossos serviços —
+quando uma NetworkPolicy seleciona um pod, tudo o que ela não permite é recusado. Por isso há também
+`allow-same-namespace` (os nossos pods entre si) e `allow-ingress-to-gateway` (só o gateway recebe de fora).
+
+**Um push atualiza os dois clusters**: o CD só muda as tags em `k8s/apps/kustomization.yaml`, que é usado
+por `k8s/` e por `k8s-global/`; cada ArgoCD sincroniza o seu.
+
 ## Monitorização
 
 - Dashboards provisionados automaticamente (compose e k8s): *Gateway* (inclui rate limiter), *Catalog*,
@@ -174,5 +298,8 @@ Resultado esperado: ~5 pedidos/s com 202 e os restantes com **429 Too Many Reque
 - Descrição base e ficheiros iniciais do enunciado: Google Gemini (fornecido pela docente).
 - Fase 2 (serviços Order e Notification, atualização do API Gateway, docker-compose, provisionamento do Grafana,
   scripts k6 e workflow GitHub Actions): gerado com apoio do Claude (Anthropic) e revisto pelo grupo.
+- Parte II, fase 1 (serviço Payment, circuit breaker + retry com jitter, testes unitários, script de verificação,
+  teste k6 do circuit breaker, dashboard Grafana, manifestos k8s do Payment, contentores não-root):
+  gerado com apoio do Claude (Anthropic) e revisto pelo grupo.
 - Fase 3 (rate limiter com Redis, manifestos Kubernetes, pipeline CD com GHCR, Application do ArgoCD, testes k6
   do rate limiter): gerado com apoio do Claude (Anthropic) e revisto pelo grupo.

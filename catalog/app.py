@@ -73,4 +73,7 @@ class CatalogHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-ThreadingHTTPServer(("0.0.0.0", 8001), CatalogHandler).serve_forever()
+ThreadingHTTPServer.request_queue_size = 512   # aguenta rajadas de pedidos (o Order chama o Catalog em cada compra)
+_server = ThreadingHTTPServer(("0.0.0.0", 8001), CatalogHandler)
+_server.daemon_threads = True
+_server.serve_forever()

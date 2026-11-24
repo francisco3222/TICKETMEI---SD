@@ -18,10 +18,18 @@ spec:
         prometheus.io/port: "8002"
         prometheus.io/path: /metrics
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
       containers:
         - name: order
           image: ghcr.io/francisco3222/ticketmei-order
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
           ports:
             - {containerPort: 8002, name: http}
           env:
@@ -29,6 +37,20 @@ spec:
             - {name: RABBITMQ_URL, value: "amqp://guest:guest@rabbitmq:5672/%2F"}
             - {name: ORDER_QUEUE, value: "order_created"}
             - {name: MAX_TICKETS_PER_ORDER, value: "4"}
+            - {name: ORDERS_EXCHANGE, value: "orders.exchange"}
+            # Parte II, fase 1: circuit breaker + retry com jitter na chamada ao Payment
+            - {name: PAYMENT_URL, value: "http://payment:8004"}
+            - {name: PAYMENT_TIMEOUT_SECONDS, value: "2"}
+            - {name: CB_FAILURE_RATE_THRESHOLD, value: "0.5"}
+            - {name: CB_SLOW_CALL_SECONDS, value: "1.5"}
+            - {name: CB_SLOW_CALL_RATE_THRESHOLD, value: "0.8"}
+            - {name: CB_WINDOW_SIZE, value: "20"}
+            - {name: CB_MIN_CALLS, value: "10"}
+            - {name: CB_OPEN_SECONDS, value: "10"}
+            - {name: CB_HALF_OPEN_MAX_CALLS, value: "3"}
+            - {name: RETRY_MAX_ATTEMPTS, value: "3"}
+            - {name: RETRY_BASE_DELAY_SECONDS, value: "0.1"}
+            - {name: RETRY_MAX_DELAY_SECONDS, value: "1"}
           readinessProbe:
             httpGet: {path: /health, port: http}
             periodSeconds: 5
@@ -38,7 +60,7 @@ spec:
             periodSeconds: 10
           resources:
             requests: {cpu: 50m, memory: 64Mi}
-            limits: {cpu: 500m, memory: 256Mi}
+            limits: {cpu: "1", memory: 384Mi}
 ---
 apiVersion: v1
 kind: Service

@@ -429,3 +429,8 @@ FodyWeavers.xsd
 
 # logs locais
 logs/
+
+# NUNCA versionar credenciais do cluster global (repositório público)
+*ClusterCredentials*
+*.docx
+.env

@@ -17,10 +17,18 @@ spec:
         prometheus.io/port: "8003"
         prometheus.io/path: /metrics
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
       containers:
         - name: notification
           image: ghcr.io/francisco3222/ticketmei-notification
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
           ports:
             - {containerPort: 8003, name: metrics}
           env:

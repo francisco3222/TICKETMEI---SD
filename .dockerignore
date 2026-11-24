@@ -3,7 +3,10 @@
 k8s
 argocd
 grafana
+**/test_*.py
 prometheus
 k6
 **/__pycache__
 *.md
+k8s-global
+scripts

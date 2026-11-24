@@ -35,10 +35,10 @@ export function orders() {
     JSON.stringify({ customer_id: `ci-${__VU}`, event_id: 'evt-101', quantity: 2, email: 'ci@ticketmei.pt' }),
     { headers: { 'Content-Type': 'application/json' } });
   check(order, {
-    'POST /orders 202': (r) => r.status === 202,
-    'order PENDING': (r) => r.status === 202 && r.json('status') === 'PENDING',
+    'POST /orders 201': (r) => r.status === 201,
+    'order CONFIRMED': (r) => r.status === 201 && r.json('status') === 'CONFIRMED',
   });
-  if (order.status === 202) {
+  if (order.status === 201) {
     check(http.get(`${BASE_URL}/orders/${order.json('id')}`), { 'GET /orders/{id} 200': (r) => r.status === 200 });
   }
 }

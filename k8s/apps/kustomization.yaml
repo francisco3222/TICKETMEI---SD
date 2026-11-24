@@ -1,0 +1,24 @@
+# Base partilhada pelos dois clusters: k8s/ (local) e k8s-global/ (cluster da UMa, grupo04).
+# As tags são atualizadas AUTOMATICAMENTE pelo GitHub Actions (cd.yml -> kustomize edit set image)
+# com o Git SHA do commit que construiu cada imagem: um push atualiza os dois clusters.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- catalog.yaml
+- order.yaml
+- payment.yaml
+- notification.yaml
+- api-gateway.yaml
+
+images:
+- name: ghcr.io/francisco3222/ticketmei-api-gateway
+  newTag: 72d5bf51ae6eb8647ff048dbf039cbdb3134dfb9
+- name: ghcr.io/francisco3222/ticketmei-catalog
+  newTag: 72d5bf51ae6eb8647ff048dbf039cbdb3134dfb9
+- name: ghcr.io/francisco3222/ticketmei-notification
+  newTag: 72d5bf51ae6eb8647ff048dbf039cbdb3134dfb9
+- name: ghcr.io/francisco3222/ticketmei-order
+  newTag: 72d5bf51ae6eb8647ff048dbf039cbdb3134dfb9
+- name: ghcr.io/francisco3222/ticketmei-payment
+  newTag: latest

@@ -1,6 +1,7 @@
 # Ponto de entrada que o ArgoCD lê (path: k8s).
-# As tags das imagens são atualizadas automaticamente pelo GitHub Actions
-# (.github/workflows/cd.yml) com o Git SHA do commit que as construiu.
+# Cluster LOCAL (Docker Desktop / k3s / k3d). O cluster global da UMa usa k8s-global/.
+# Os serviços da aplicação e as tags das imagens estão em apps/kustomization.yaml,
+# partilhado pelos dois clusters (o CD atualiza as tags lá, com o Git SHA).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -14,10 +15,7 @@ resources:
 - namespace.yaml
 - infra/redis.yaml
 - infra/rabbitmq.yaml
-- apps/catalog.yaml
-- apps/order.yaml
-- apps/notification.yaml
-- apps/api-gateway.yaml
+- apps            # base partilhada com o cluster global (k8s-global/)
 - monitoring/prometheus.yaml
 - monitoring/grafana.yaml
 
@@ -38,14 +36,5 @@ configMapGenerator:
   - monitoring/grafana/dashboards/gateway.json
   - monitoring/grafana/dashboards/catalog.json
   - monitoring/grafana/dashboards/order-notification.json
+  - monitoring/grafana/dashboards/payment-circuit-breaker.json
   name: grafana-dashboards
-
-images:
-- name: ghcr.io/francisco3222/ticketmei-api-gateway
-  newTag: 72d5bf51ae6eb8647ff048dbf039cbdb3134dfb9
-- name: ghcr.io/francisco3222/ticketmei-catalog
-  newTag: 72d5bf51ae6eb8647ff048dbf039cbdb3134dfb9
-- name: ghcr.io/francisco3222/ticketmei-notification
-  newTag: 72d5bf51ae6eb8647ff048dbf039cbdb3134dfb9
-- name: ghcr.io/francisco3222/ticketmei-order
-  newTag: 72d5bf51ae6eb8647ff048dbf039cbdb3134dfb9
