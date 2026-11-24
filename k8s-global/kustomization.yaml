@@ -28,3 +28,4 @@ resources:
 patches:
 - path: patches/rabbitmq-env.yaml
 - path: patches/gateway.yaml
+- path: patches/resources.yaml

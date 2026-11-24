@@ -1,0 +1,69 @@
+# Quota do namespace grupo04 no cluster global: limits.cpu TOTAL = 1500m.
+# Os valores do cluster local (2 réplicas do gateway a 500m, etc.) não cabem.
+#
+# Orçamento (limits.cpu):  gateway 200 + catalog 150 + order 300 + payment 200
+#                          + notification 150 + redis 100  = 1100m
+# Sobram 400m para o rolling update: o maior pod novo (order, 300m) cabe enquanto o antigo
+# ainda está a correr, por isso as atualizações automáticas do ArgoCD não ficam bloqueadas.
+# Gateway e catalog com 1 réplica (o rate limiter continua correto: o contador está no Redis).
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: api-gateway}
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: api-gateway
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: catalog}
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: catalog
+          resources:
+            requests: {cpu: 30m, memory: 48Mi}
+            limits: {cpu: 150m, memory: 96Mi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: order}
+spec:
+  template:
+    spec:
+      containers:
+        - name: order
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 300m, memory: 192Mi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: payment}
+spec:
+  template:
+    spec:
+      containers:
+        - name: payment
+          resources:
+            requests: {cpu: 30m, memory: 48Mi}
+            limits: {cpu: 200m, memory: 192Mi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: notification}
+spec:
+  template:
+    spec:
+      containers:
+        - name: notification
+          resources:
+            requests: {cpu: 30m, memory: 48Mi}
+            limits: {cpu: 150m, memory: 128Mi}
