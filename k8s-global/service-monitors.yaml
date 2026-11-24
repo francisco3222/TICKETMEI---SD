@@ -1,0 +1,79 @@
+# ServiceMonitor (template do professor): o Prometheus do cluster recolhe /metrics do api-gateway
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api-gateway-monitor
+  labels:
+    release: kube-prometheus-stack-prometheus   # tem de coincidir com o serviceMonitorSelector do Prometheus
+spec:
+  selector:
+    matchLabels:
+      app: api-gateway
+  endpoints:
+    - port: http               # nome da porta no Service de k8s/apps/api-gateway.yaml
+      path: /metrics
+      interval: 15s
+---
+# ServiceMonitor (template do professor): o Prometheus do cluster recolhe /metrics do catalog
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: catalog-monitor
+  labels:
+    release: kube-prometheus-stack-prometheus   # tem de coincidir com o serviceMonitorSelector do Prometheus
+spec:
+  selector:
+    matchLabels:
+      app: catalog
+  endpoints:
+    - port: http               # nome da porta no Service de k8s/apps/catalog.yaml
+      path: /metrics
+      interval: 15s
+---
+# ServiceMonitor (template do professor): o Prometheus do cluster recolhe /metrics do order
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: order-monitor
+  labels:
+    release: kube-prometheus-stack-prometheus   # tem de coincidir com o serviceMonitorSelector do Prometheus
+spec:
+  selector:
+    matchLabels:
+      app: order
+  endpoints:
+    - port: http               # nome da porta no Service de k8s/apps/order.yaml
+      path: /metrics
+      interval: 15s
+---
+# ServiceMonitor (template do professor): o Prometheus do cluster recolhe /metrics do payment
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: payment-monitor
+  labels:
+    release: kube-prometheus-stack-prometheus   # tem de coincidir com o serviceMonitorSelector do Prometheus
+spec:
+  selector:
+    matchLabels:
+      app: payment
+  endpoints:
+    - port: http               # nome da porta no Service de k8s/apps/payment.yaml
+      path: /metrics
+      interval: 15s
+---
+# ServiceMonitor (template do professor): o Prometheus do cluster recolhe /metrics do notification
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: notification-monitor
+  labels:
+    release: kube-prometheus-stack-prometheus   # tem de coincidir com o serviceMonitorSelector do Prometheus
+spec:
+  selector:
+    matchLabels:
+      app: notification
+  endpoints:
+    - port: metrics               # nome da porta no Service de k8s/apps/notification.yaml
+      path: /metrics
+      interval: 15s

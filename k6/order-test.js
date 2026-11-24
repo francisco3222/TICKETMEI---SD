@@ -38,8 +38,8 @@ export default function () {
   });
 
   const ok = check(res, {
-    'status is 202': (r) => r.status === 202,
-    'order is PENDING': (r) => r.status === 202 && r.json('status') === 'PENDING',
+    'status is 201': (r) => r.status === 201,
+    'order is CONFIRMED': (r) => r.status === 201 && r.json('status') === 'CONFIRMED',
   });
 
   if (ok) {

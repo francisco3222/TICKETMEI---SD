@@ -23,8 +23,14 @@ jobs:
           curl -sSfL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.4.3/kustomize_v5.4.3_linux_amd64.tar.gz | tar xz -C "$HOME/bin"
           curl -sSfL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz -C "$HOME/bin" kubeconform
 
-      - name: kustomize build + validação dos schemas
+      - name: kustomize build + validação dos schemas (cluster local)
         run: kustomize build k8s | kubeconform -strict -summary -kubernetes-version 1.30.0
+
+      - name: kustomize build + validação dos schemas (cluster global, grupo04)
+        run: |
+          kustomize build k8s-global | kubeconform -strict -summary -kubernetes-version 1.30.0 \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
 
   build-and-test:
     runs-on: ubuntu-latest
@@ -33,7 +39,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Verificar sintaxe Python
-        run: python -m py_compile api-gateway/*.py catalog/app.py order/app.py notification/app.py
+        run: python -m py_compile api-gateway/*.py catalog/app.py order/*.py notification/app.py payment/app.py
+
+      - name: Testes unitários do circuit breaker
+        run: cd order && python -m unittest -v test_circuit_breaker
 
       - name: Validar docker-compose.yml
         run: docker compose config --quiet
@@ -72,6 +81,10 @@ jobs:
           check http://localhost:8001/metrics catalog_requests_total
           check http://localhost:8002/metrics orders_initiated_total
           check http://localhost:8003/metrics notifications_processed_total
+          check http://localhost:8004/metrics payment_requests_total
+          check http://localhost:8004/metrics payment_processing_duration_seconds
+          check http://localhost:8002/metrics circuit_breaker_state
+          check http://localhost:8002/metrics payment_client_requests_total
 
       - name: Testes k6 (smoke)
         run: docker compose --profile testing run --rm k6 run smoke-test.js
@@ -85,6 +98,9 @@ jobs:
 
       - name: Testes k6 (rate limiter -> 429)
         run: docker compose --profile testing run --rm k6 run rate-limit-test.js
+
+      - name: Circuit breaker (falhas injetadas -> OPEN -> 503 -> HALF_OPEN -> CLOSED)
+        run: bash scripts/circuit-breaker-check.sh
 
       - name: Logs em caso de falha
         if: failure()

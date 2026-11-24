@@ -32,7 +32,7 @@
       "title": "Compras iniciadas (total)",
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "x": 0,
@@ -62,7 +62,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "expr": "sum by (status) (orders_initiated_total)",
           "legendFormat": "{{status}}",
@@ -75,7 +75,7 @@
       "title": "Compras iniciadas por segundo",
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "x": 6,
@@ -104,7 +104,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "expr": "sum by (status) (rate(orders_initiated_total[1m]))",
           "legendFormat": "{{status}}",
@@ -117,7 +117,7 @@
       "title": "Order: pedidos por segundo (HTTP)",
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "x": 15,
@@ -146,7 +146,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "expr": "sum by (endpoint, http_status) (rate(order_requests_total[1m]))",
           "legendFormat": "{{endpoint}} {{http_status}}",
@@ -159,7 +159,7 @@
       "title": "Order: latência POST /orders",
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "x": 0,
@@ -188,7 +188,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "expr": "histogram_quantile(0.95, sum by (le) (rate(order_request_duration_seconds_bucket{endpoint=\"/orders\"}[1m])))",
           "legendFormat": "p95",
@@ -197,7 +197,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "expr": "histogram_quantile(0.99, sum by (le) (rate(order_request_duration_seconds_bucket{endpoint=\"/orders\"}[1m])))",
           "legendFormat": "p99",
@@ -210,7 +210,7 @@
       "title": "Order: taxa de erros HTTP (%)",
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "x": 12,
@@ -239,7 +239,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "expr": "100 * sum(rate(order_requests_total{http_status=~\"5..\"}[1m])) / clamp_min(sum(rate(order_requests_total[1m])), 1e-9)",
           "legendFormat": "5xx",
@@ -248,7 +248,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "expr": "100 * sum(rate(order_requests_total{http_status=~\"4..\"}[1m])) / clamp_min(sum(rate(order_requests_total[1m])), 1e-9)",
           "legendFormat": "4xx",
@@ -273,7 +273,7 @@
       "title": "Notificações processadas por segundo",
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "x": 0,
@@ -302,7 +302,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "expr": "sum by (status) (rate(notifications_processed_total[1m]))",
           "legendFormat": "{{status}}",
@@ -315,7 +315,7 @@
       "title": "Tempo de processamento da notificação",
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "x": 12,
@@ -344,7 +344,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "expr": "histogram_quantile(0.50, sum by (le) (rate(notification_processing_duration_seconds_bucket[1m])))",
           "legendFormat": "p50",
@@ -353,7 +353,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "expr": "histogram_quantile(0.95, sum by (le) (rate(notification_processing_duration_seconds_bucket[1m])))",
           "legendFormat": "p95",
@@ -362,7 +362,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "expr": "histogram_quantile(0.99, sum by (le) (rate(notification_processing_duration_seconds_bucket[1m])))",
           "legendFormat": "p99",
@@ -387,7 +387,7 @@
       "title": "Profundidade da fila",
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "x": 0,
@@ -416,7 +416,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "expr": "sum(rabbitmq_queue_messages_ready{queue=\"order_created\"})",
           "legendFormat": "ready",
@@ -425,7 +425,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "expr": "sum(rabbitmq_queue_messages_unacked{queue=\"order_created\"})",
           "legendFormat": "unacked",
@@ -438,7 +438,7 @@
       "title": "Mensagens publicadas vs entregues (msg/s)",
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "x": 12,
@@ -467,7 +467,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "expr": "sum(rate(order_messages_published_total{result=\"success\"}[1m]))",
           "legendFormat": "publicadas (Order)",
@@ -476,7 +476,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "expr": "sum(rate(notifications_processed_total[1m]))",
           "legendFormat": "consumidas (Notification)",
@@ -489,7 +489,7 @@
       "title": "Gateway: POST /orders por estado HTTP",
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "x": 0,
@@ -518,7 +518,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${datasource}"
           },
           "expr": "sum by (http_status) (rate(gateway_requests_total{endpoint=\"/orders\"}[1m]))",
           "legendFormat": "{{http_status}}",
@@ -528,7 +528,21 @@
     }
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "type": "datasource",
+        "name": "datasource",
+        "label": "Prometheus",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0,
+        "refresh": 1,
+        "regex": "",
+        "includeAll": false,
+        "multi": false,
+        "options": []
+      }
+    ]
   },
   "annotations": {
     "list": []

@@ -54,13 +54,15 @@ jobs:
               - 'order/**'
             notification:
               - 'notification/**'
+            payment:
+              - 'payment/**'
 
       - name: Lista final de serviços
         id: result
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ "${{ inputs.build_all }}" = "true" ]; then
-              SERVICES='["api-gateway","catalog","order","notification"]'
+              SERVICES='["api-gateway","catalog","order","notification","payment"]'
             else
               SERVICES='[]'
             fi
@@ -136,7 +138,7 @@ jobs:
           SERVICES: ${{ needs.changes.outputs.services }}
         run: |
           OWNER="${GITHUB_REPOSITORY_OWNER,,}"
-          cd k8s
+          cd k8s/apps     # base partilhada: atualiza o cluster local (k8s/) e o global (k8s-global/)
           for svc in $(echo "$SERVICES" | jq -r '.[]'); do
             echo "-> $svc = ${GITHUB_SHA}"
             kustomize edit set image "ghcr.io/${OWNER}/ticketmei-${svc}:${GITHUB_SHA}"
@@ -147,7 +149,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add k8s/kustomization.yaml
+          git add k8s/apps/kustomization.yaml
           if git diff --cached --quiet; then echo "Sem alterações"; exit 0; fi
           git commit -m "chore(k8s): deploy ${GITHUB_SHA::7} [skip ci]"
           for i in 1 2 3; do

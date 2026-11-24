@@ -1,0 +1,28 @@
+# Cluster GLOBAL (UMa) – grupo04.
+# Normalmente cria-se pela UI do ArgoCD (http://argocd.10.2.15.161.nip.io, login grupo04):
+#   + NEW APP  ->  Application Name: ticketmei   Project: grupo04
+#   Sync Policy: Automatic (marcar PRUNE RESOURCES e SELF HEAL)
+#   Repository URL: https://github.com/francisco3222/TICKETMEI---SD.git   Revision: main   Path: k8s-global
+#   Cluster URL: https://kubernetes.default.svc   Namespace: grupo04
+# Este ficheiro é o equivalente em YAML (UI: "EDIT AS YAML").
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ticketmei
+  namespace: argocd
+spec:
+  project: grupo04
+  source:
+    repoURL: https://github.com/francisco3222/TICKETMEI---SD.git
+    targetRevision: main
+    path: k8s-global
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: grupo04
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 3m}

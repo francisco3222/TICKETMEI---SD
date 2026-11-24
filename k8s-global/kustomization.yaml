@@ -1,0 +1,30 @@
+# Cluster GLOBAL da UMa – grupo04 (aceder dentro da rede da UMa ou por VPN).
+# ArgoCD: http://argocd.10.2.15.161.nip.io  ·  AppProject: grupo04  ·  path: k8s-global
+#
+# Diferenças em relação ao cluster local (k8s/):
+#   - namespace grupo04 (já existe; não o criamos);
+#   - RabbitMQ, Prometheus e Grafana são os do cluster (não instalamos os nossos);
+#   - credenciais do RabbitMQ vêm do Secret grupo04-user-user-credentials (já existe no namespace);
+#   - métricas recolhidas por ServiceMonitor + NetworkPolicy (template do professor);
+#   - gateway exposto por Ingress em vez de LoadBalancer;
+#   - pods não-root (Pod Security "restricted").
+# Os serviços e as TAGS das imagens vêm da base partilhada ../k8s/apps (atualizada pelo CD).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: grupo04
+
+labels:
+- pairs:
+    app.kubernetes.io/part-of: ticketmei
+
+resources:
+- ../k8s/apps
+- redis.yaml
+- service-monitors.yaml
+- network-policies.yaml
+- ingress.yaml
+
+patches:
+- path: patches/rabbitmq-env.yaml
+- path: patches/gateway.yaml

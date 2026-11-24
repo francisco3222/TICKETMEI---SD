@@ -1,0 +1,36 @@
+# RabbitMQ do cluster (namespace rabbitmq-system), vhost /grupo04.
+# As credenciais NUNCA ficam no Git: vêm do Secret criado pelo professor no namespace grupo04.
+# (O código usa RABBITMQ_HOST/VHOST/USER/PASSWORD quando RABBITMQ_HOST está definido.)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order
+spec:
+  template:
+    spec:
+      containers:
+        - name: order
+          env:
+            - {name: RABBITMQ_HOST, value: "rabbitmq.rabbitmq-system.svc.cluster.local"}
+            - {name: RABBITMQ_VHOST, value: "/grupo04"}
+            - name: RABBITMQ_USER
+              valueFrom: {secretKeyRef: {name: grupo04-user-user-credentials, key: username}}
+            - name: RABBITMQ_PASSWORD
+              valueFrom: {secretKeyRef: {name: grupo04-user-user-credentials, key: password}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification
+spec:
+  template:
+    spec:
+      containers:
+        - name: notification
+          env:
+            - {name: RABBITMQ_HOST, value: "rabbitmq.rabbitmq-system.svc.cluster.local"}
+            - {name: RABBITMQ_VHOST, value: "/grupo04"}
+            - name: RABBITMQ_USER
+              valueFrom: {secretKeyRef: {name: grupo04-user-user-credentials, key: username}}
+            - name: RABBITMQ_PASSWORD
+              valueFrom: {secretKeyRef: {name: grupo04-user-user-credentials, key: password}}

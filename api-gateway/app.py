@@ -16,6 +16,8 @@ from ratelimiter import RedisRateLimiter
 CATALOG_URL = os.getenv("CATALOG_URL", "http://catalog:8001")
 ORDER_URL = os.getenv("ORDER_URL", "http://order:8002")
 MAX_BODY_BYTES = 10_000
+# O Order pode demorar até ~7 s (3 tentativas ao Payment com timeout de 2 s + jitter)
+UPSTREAM_TIMEOUT_SECONDS = float(os.getenv("UPSTREAM_TIMEOUT_SECONDS", "15"))
 
 # ---- Rate limiter (RNF3): 5 pedidos/s por IP em POST /orders, por defeito
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
@@ -127,7 +129,9 @@ class GatewayHandler(BaseHTTPRequestHandler):
         if TRUST_PROXY_HEADERS:
             forwarded = self.headers.get("X-Forwarded-For")
             if forwarded:
-                return forwarded.split(",")[0].strip()
+                # última entrada = a que o NOSSO proxy (Ingress) acrescentou; as anteriores vêm do
+                # cliente e podiam ser inventadas para fugir ao rate limiter
+                return forwarded.split(",")[-1].strip()
         return self.client_address[0]
 
     def _rate_limit(self, method, endpoint):
@@ -152,7 +156,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
         # Preserva o IP original do cliente (útil para o rate limiter da fase 3)
         headers["X-Forwarded-For"] = self._client_ip()
         try:
-            with urlopen(Request(url, data=data, method=method, headers=headers), timeout=5) as response:
+            with urlopen(Request(url, data=data, method=method, headers=headers), timeout=UPSTREAM_TIMEOUT_SECONDS) as response:
                 return response.status, response.read()
         except HTTPError as error:
             return error.code, error.read()
@@ -173,10 +177,15 @@ class GatewayHandler(BaseHTTPRequestHandler):
         pass
 
 
+ThreadingHTTPServer.request_queue_size = 512   # aguenta rajadas de pedidos sem recusar ligações
+
+
 if __name__ == "__main__":
     for ep in {e for _, e in RATE_LIMITED}:
         gateway_rate_limited.labels(ep)  # série a 0 desde o arranque
     if rate_limiter:
         log.info("Rate limiter ON: %s req / %gs per IP on %s (redis=%s)",
                  RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS, sorted(RATE_LIMITED), REDIS_URL)
-    ThreadingHTTPServer(("0.0.0.0", 8000), GatewayHandler).serve_forever()
+    server = ThreadingHTTPServer(("0.0.0.0", 8000), GatewayHandler)
+    server.daemon_threads = True
+    server.serve_forever()

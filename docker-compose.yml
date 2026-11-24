@@ -78,13 +78,42 @@ services:
     environment:
       CATALOG_URL: http://catalog:8001
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/%2F
+      ORDERS_EXCHANGE: orders.exchange
       ORDER_QUEUE: order_created
       MAX_TICKETS_PER_ORDER: "4"
+      # --- Parte II, fase 1: chamada ao Payment protegida por circuit breaker + retry com jitter
+      PAYMENT_URL: http://payment:8004
+      PAYMENT_TIMEOUT_SECONDS: "2"
+      CB_FAILURE_RATE_THRESHOLD: "0.5"   # abre com >= 50 % de falhas...
+      CB_SLOW_CALL_SECONDS: "1.5"        # ...ou com >= 80 % de pedidos mais lentos que 1,5 s
+      CB_SLOW_CALL_RATE_THRESHOLD: "0.8"
+      CB_WINDOW_SIZE: "20"               # nos últimos 20 pedidos
+      CB_MIN_CALLS: "10"
+      CB_OPEN_SECONDS: "10"              # tempo em OPEN antes de HALF_OPEN
+      CB_HALF_OPEN_MAX_CALLS: "3"
+      RETRY_MAX_ATTEMPTS: "3"
+      RETRY_BASE_DELAY_SECONDS: "0.1"
+      RETRY_MAX_DELAY_SECONDS: "1"
     depends_on:
       catalog:
         condition: service_started
+      payment:
+        condition: service_started
       rabbitmq:
         condition: service_healthy
+    networks:
+      - ticketmei-net
+
+  payment:
+    build:
+      context: .
+      dockerfile: payment/Dockerfile
+    container_name: payment
+    ports:
+      - "8004:8004"
+    environment:
+      FAULT_ERROR_RATE: "0"      # alterar em runtime: POST /payments/configure-faults
+      FAULT_LATENCY_MS: "0"
     networks:
       - ticketmei-net
 

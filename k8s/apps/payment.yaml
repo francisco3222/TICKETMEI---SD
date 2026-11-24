@@ -1,0 +1,60 @@
+# Payment: simula um sistema de pagamentos externo com injeção de falhas.
+# Só acessível dentro do cluster (ClusterIP): os clientes não falam com o Payment diretamente.
+# 1 réplica DE PROPÓSITO: a configuração de falhas (POST /payments/configure-faults) é por
+# processo; com 2 réplicas só metade dos pedidos ficaria degradada.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment
+  labels: {app: payment}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: payment}
+  template:
+    metadata:
+      labels: {app: payment}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8004"
+        prometheus.io/path: /metrics
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: payment
+          image: ghcr.io/francisco3222/ticketmei-payment
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {containerPort: 8004, name: http}
+          env:
+            - {name: FAULT_ERROR_RATE, value: "0"}
+            - {name: FAULT_LATENCY_MS, value: "0"}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 384Mi}   # muitas threads a dormir quando há latência injetada
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment
+  labels: {app: payment}
+spec:
+  selector: {app: payment}
+  ports:
+    - {name: http, port: 8004, targetPort: http}
